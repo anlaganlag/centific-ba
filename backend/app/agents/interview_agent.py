@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.azure import AzureProvider
@@ -7,6 +8,8 @@ import os
 from dotenv import load_dotenv
 
 from app.models.analysis import SingleFeatureInterviewResult, InterviewResult, InterviewQuestion
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -82,10 +85,14 @@ async def generate_interview(feature_drafts_json: str, document_content: str) ->
             return await _interview_single_feature(feat, document_content, q_start)
 
     tasks = [process_feature(feat, i) for i, feat in enumerate(features_data)]
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     combined = []
-    for qs in results:
-        combined.extend(qs)
+    for i, r in enumerate(results):
+        if isinstance(r, Exception):
+            feat_id = features_data[i].get("feature_id", f"index-{i}")
+            logger.warning(f"Interview generation failed for feature {feat_id}: {r}")
+            continue
+        combined.extend(r)
 
     return InterviewResult(questions=combined)

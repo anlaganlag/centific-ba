@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.azure import AzureProvider
@@ -7,6 +8,8 @@ import os
 from dotenv import load_dotenv
 
 from app.models.analysis import StoryGenerationResult, Feature
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -102,9 +105,20 @@ async def generate_stories(
             )
 
     tasks = [process_feature(feat, i) for i, feat in enumerate(features_data)]
-    all_features = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    return StoryGenerationResult(
-        features=list(all_features),
-        notes=f"Generated stories for {len(all_features)} features."
-    )
+    succeeded = []
+    failed = []
+    for i, r in enumerate(results):
+        if isinstance(r, Exception):
+            feat_id = features_data[i].get("feature_id", f"index-{i}")
+            logger.warning(f"Story generation failed for feature {feat_id}: {r}")
+            failed.append(feat_id)
+            continue
+        succeeded.append(r)
+
+    notes = f"Generated stories for {len(succeeded)} features."
+    if failed:
+        notes += f" Failed: {', '.join(failed)}."
+
+    return StoryGenerationResult(features=succeeded, notes=notes)

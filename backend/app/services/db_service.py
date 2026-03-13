@@ -230,6 +230,16 @@ class DatabaseService:
         conn.close()
         return dict(row) if row else None
 
+    def get_analysis_sessions(self, project_id: str) -> List[Dict]:
+        """Get all analysis sessions for a project, newest first."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM analysis_sessions WHERE project_id = ? ORDER BY created_at DESC",
+            (project_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     def get_latest_analysis_session(self, project_id: str) -> Optional[Dict]:
         conn = self._get_conn()
         row = conn.execute(

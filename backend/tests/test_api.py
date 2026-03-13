@@ -399,6 +399,123 @@ class TestAnalysis:
         # 404 because no session, or 400 because not done
         assert r.status_code in (400, 404)
 
+    def test_list_sessions_empty(self, client, auth_headers):
+        pid = self._create_project(client, auth_headers)
+        r = client.get(f"/api/analysis/{pid}/sessions", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_list_sessions_after_analysis(self, client, auth_headers):
+        """Run analysis, then verify session appears in history."""
+        import time
+
+        pid = self._create_project(client, auth_headers)
+
+        # Upload doc
+        client.post(
+            f"/api/documents/upload/{pid}",
+            headers=auth_headers,
+            files={"files": ("test.txt", io.BytesIO(b"Test content"), "text/plain")},
+        )
+
+        # Start analysis
+        r = client.post(
+            f"/api/analysis/{pid}/start", headers=auth_headers,
+            json={"mode": "auto"},
+        )
+        session_id = r.json()["session_id"]
+
+        # Wait for completion
+        for _ in range(20):
+            time.sleep(0.5)
+            r = client.get(f"/api/analysis/{pid}/status", headers=auth_headers)
+            if r.json()["status"] in ("done", "error"):
+                break
+
+        # List sessions
+        r = client.get(f"/api/analysis/{pid}/sessions", headers=auth_headers)
+        assert r.status_code == 200
+        sessions = r.json()
+        assert len(sessions) >= 1
+        assert sessions[0]["session_id"] == session_id
+        assert "created_at" in sessions[0]
+
+    def test_get_historical_session(self, client, auth_headers):
+        """Run analysis twice, verify both sessions accessible."""
+        import time
+
+        pid = self._create_project(client, auth_headers)
+        client.post(
+            f"/api/documents/upload/{pid}",
+            headers=auth_headers,
+            files={"files": ("test.txt", io.BytesIO(b"Test content"), "text/plain")},
+        )
+
+        # Run first analysis
+        r1 = client.post(
+            f"/api/analysis/{pid}/start", headers=auth_headers,
+            json={"mode": "auto"},
+        )
+        sid1 = r1.json()["session_id"]
+        for _ in range(20):
+            time.sleep(0.5)
+            r = client.get(f"/api/analysis/{pid}/status", headers=auth_headers)
+            if r.json()["status"] in ("done", "error"):
+                break
+
+        # Run second analysis
+        r2 = client.post(
+            f"/api/analysis/{pid}/start", headers=auth_headers,
+            json={"mode": "auto"},
+        )
+        sid2 = r2.json()["session_id"]
+        for _ in range(20):
+            time.sleep(0.5)
+            r = client.get(f"/api/analysis/{pid}/status", headers=auth_headers)
+            if r.json()["status"] in ("done", "error"):
+                break
+
+        # /status returns latest (sid2)
+        r = client.get(f"/api/analysis/{pid}/status", headers=auth_headers)
+        assert r.json()["session_id"] == sid2
+
+        # But old session is still accessible via /sessions/{session_id}
+        r = client.get(f"/api/analysis/{pid}/sessions/{sid1}", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json()["session_id"] == sid1
+
+        # Sessions list has both
+        r = client.get(f"/api/analysis/{pid}/sessions", headers=auth_headers)
+        ids = [s["session_id"] for s in r.json()]
+        assert sid1 in ids
+        assert sid2 in ids
+
+    def test_delete_document_cleans_disk(self, client, auth_headers, tmp_data_dir):
+        """Verify physical file is removed after document deletion."""
+        pid = self._create_project(client, auth_headers)
+        content = b"Content for disk cleanup test."
+        r = client.post(
+            f"/api/documents/upload/{pid}",
+            headers=auth_headers,
+            files={"files": ("cleanup.txt", io.BytesIO(content), "text/plain")},
+        )
+        doc_id = r.json()["documents"][0]["doc_id"]
+
+        # Verify file exists on disk
+        upload_dir = os.path.join(tmp_data_dir, "uploads")
+        files_before = os.listdir(upload_dir)
+        matching = [f for f in files_before if doc_id in f]
+        assert len(matching) == 1, f"Expected file on disk, found: {files_before}"
+
+        # Delete document
+        r = client.delete(f"/api/documents/{doc_id}", headers=auth_headers)
+        assert r.status_code == 200
+
+        # Verify file is gone
+        files_after = os.listdir(upload_dir)
+        matching_after = [f for f in files_after if doc_id in f]
+        assert len(matching_after) == 0, f"File not cleaned up: {files_after}"
+
 
 # ---------------------------------------------------------------------------
 # Health

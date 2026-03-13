@@ -122,3 +122,15 @@ class AnalysisStatusResponse(BaseModel):
     feature_drafts: Optional[List[FeatureDraft]] = None
     questions: Optional[List[InterviewQuestion]] = None
     features: Optional[List[Feature]] = None
+
+
+class AnalysisSessionSummary(BaseModel):
+    """Lightweight summary for session listing (without full JSON payloads)."""
+    session_id: str
+    project_id: str
+    mode: str
+    status: str
+    error_message: Optional[str] = None
+    progress_message: Optional[str] = None
+    created_at: str
+    updated_at: str

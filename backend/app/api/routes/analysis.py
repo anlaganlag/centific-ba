@@ -7,7 +7,8 @@ from app.services.db_service import DatabaseService
 from app.services.analysis_service import AnalysisService
 from app.services.export_service import ExportService
 from app.models.analysis import (
-    StartAnalysisRequest, SubmitAnswersRequest, AnalysisStatusResponse, AnalysisStatus,
+    StartAnalysisRequest, SubmitAnswersRequest,
+    AnalysisStatusResponse, AnalysisSessionSummary, AnalysisStatus,
 )
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
@@ -58,6 +59,55 @@ async def get_analysis_status(
     if not result:
         raise HTTPException(status_code=404, detail="No analysis session found")
     return result
+
+
+@router.get("/{project_id}/sessions", response_model=list[AnalysisSessionSummary])
+async def list_analysis_sessions(
+    project_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """List all analysis sessions for a project (newest first)."""
+    db = get_db()
+
+    project = db.get_project(project_id)
+    if not project or project["owner_id"] != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sessions = db.get_analysis_sessions(project_id)
+    return [
+        AnalysisSessionSummary(
+            session_id=s["id"],
+            project_id=s["project_id"],
+            mode=s["mode"],
+            status=s["status"],
+            error_message=s.get("error_message"),
+            progress_message=s.get("progress_message"),
+            created_at=s["created_at"],
+            updated_at=s["updated_at"],
+        )
+        for s in sessions
+    ]
+
+
+@router.get("/{project_id}/sessions/{session_id}", response_model=AnalysisStatusResponse)
+async def get_analysis_session(
+    project_id: str,
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Get a specific historical analysis session with full data."""
+    db = get_db()
+
+    project = db.get_project(project_id)
+    if not project or project["owner_id"] != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = _get_analysis_service()
+    session = db.get_analysis_session(session_id)
+    if not session or session["project_id"] != project_id:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return service._build_response_from_session(session)
 
 
 @router.post("/{project_id}/answers", response_model=AnalysisStatusResponse)
