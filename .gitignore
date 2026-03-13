@@ -8,13 +8,19 @@ build/
 *.egg
 venv/
 .venv/
+.python-version
+pip-wheel-metadata/
 
 # Environment
 .env
 *.env.local
+frontend/.env.*.local
+frontend/.env.local
 
 # Data (local-only)
 backend/data/
+backend/data/uploads/
+backend/data/vectors/
 *.db
 *.sqlite3
 
@@ -31,6 +37,7 @@ Thumbs.db
 # Node
 node_modules/
 frontend/dist/
+.eslintcache
 
 # Docker
 *.log
@@ -38,6 +45,8 @@ frontend/dist/
 # Test artifacts
 *.docx
 metrics_result*.json
+.coverage
+htmlcov/
 
 # Build artifacts
 tsconfig.tsbuildinfo
