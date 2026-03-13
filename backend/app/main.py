@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,7 +6,15 @@ from app.config import settings
 from app.auth.dependencies import get_db
 from app.api.routes import auth, projects, documents, chat, analysis
 
-app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure database is initialized
+    get_db()
+    yield
+
+
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
 
 # CORS
 app.add_middleware(
@@ -22,12 +31,6 @@ app.include_router(projects.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(analysis.router)
-
-
-@app.on_event("startup")
-async def startup():
-    # Ensure database is initialized
-    get_db()
 
 
 @app.get("/")
