@@ -1,0 +1,94 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  acrName: 'crswatteam01'
+  resourceGroup: 'rg-ba-toolkit'
+  backendApp: 'ba-toolkit-backend'
+  frontendApp: 'ba-toolkit-frontend'
+
+stages:
+  - stage: Build
+    displayName: 'Build & Push Images'
+    jobs:
+      - job: BuildBackend
+        displayName: 'Build Backend'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Build & push backend image'
+            inputs:
+              azureSubscription: 'Azure-Service-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build \
+                  --registry $(acrName) \
+                  --image ba-toolkit-backend:$(Build.BuildId) \
+                  --image ba-toolkit-backend:latest \
+                  --file backend/Dockerfile \
+                  backend/
+
+      - job: BuildFrontend
+        displayName: 'Build Frontend'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Build & push frontend image'
+            inputs:
+              azureSubscription: 'Azure-Service-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build \
+                  --registry $(acrName) \
+                  --image ba-toolkit-frontend:$(Build.BuildId) \
+                  --image ba-toolkit-frontend:latest \
+                  --file frontend/Dockerfile \
+                  frontend/
+
+  - stage: Deploy
+    displayName: 'Deploy to Container Apps'
+    dependsOn: Build
+    jobs:
+      - deployment: DeployBackend
+        displayName: 'Deploy Backend'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Update backend container app'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az containerapp update \
+                        --name $(backendApp) \
+                        --resource-group $(resourceGroup) \
+                        --image $(acrName).azurecr.io/ba-toolkit-backend:$(Build.BuildId)
+
+      - deployment: DeployFrontend
+        displayName: 'Deploy Frontend'
+        environment: 'production'
+        dependsOn: DeployBackend
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Update frontend container app'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az containerapp update \
+                        --name $(frontendApp) \
+                        --resource-group $(resourceGroup) \
+                        --image $(acrName).azurecr.io/ba-toolkit-frontend:$(Build.BuildId)
