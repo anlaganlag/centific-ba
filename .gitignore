@@ -16,6 +16,7 @@ pip-wheel-metadata/
 *.env.local
 frontend/.env.*.local
 frontend/.env.local
+frontend/.env.production
 
 # Data (local-only)
 backend/data/
