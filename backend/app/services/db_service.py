@@ -36,7 +36,7 @@ class DatabaseService:
     def _close_conn(self, conn: sqlite3.Connection) -> None:
         """Close connection unless it's the cached in-memory one."""
         if self.db_path != ":memory:":
-            self._close_conn(conn)
+            conn.close()
 
     def init_database(self):
         """Initialize SQLite database with schema"""
