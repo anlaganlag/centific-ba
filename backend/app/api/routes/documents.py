@@ -7,12 +7,13 @@ from app.auth.models import CurrentUser
 from app.auth.dependencies import get_current_user, get_db
 from app.services.document_service import DocumentService
 from app.services.vector_service import VectorService
-from app.config import settings
+import app.config
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
 def _get_doc_service() -> DocumentService:
+    settings = app.config.settings
     return DocumentService(
         upload_dir=settings.UPLOAD_DIR,
         docling_serve_url=settings.DOCLING_SERVE_URL,
@@ -20,6 +21,7 @@ def _get_doc_service() -> DocumentService:
 
 
 def _get_vector_service() -> VectorService:
+    settings = app.config.settings
     return VectorService(
         persist_directory=settings.VECTOR_DB_PATH,
         api_key=settings.OPENAI_API_KEY,
@@ -41,6 +43,7 @@ async def upload_documents(
 
     doc_service = _get_doc_service()
     vector_service = _get_vector_service()
+    settings = app.config.settings
 
     results = []
     for file in files:

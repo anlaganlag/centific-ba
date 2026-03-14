@@ -17,6 +17,14 @@ def _get_analysis_service() -> AnalysisService:
     return AnalysisService(get_db())
 
 
+def _ensure_project_access(project_id: str, current_user: CurrentUser) -> dict:
+    db = get_db()
+    project = db.get_project(project_id)
+    if not project or project["owner_id"] != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @router.post("/{project_id}/start", response_model=AnalysisStatusResponse)
 async def start_analysis(
     project_id: str,
@@ -25,11 +33,7 @@ async def start_analysis(
 ):
     """Start BA analysis chain for a project."""
     db = get_db()
-
-    # Verify project exists and belongs to user
-    project = db.get_project(project_id)
-    if not project or project["owner_id"] != current_user.user_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    _ensure_project_access(project_id, current_user)
 
     # Check documents exist
     docs = db.get_documents_by_project(project_id)
@@ -47,17 +51,54 @@ async def get_analysis_status(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Get current analysis status and results."""
-    db = get_db()
-
-    project = db.get_project(project_id)
-    if not project or project["owner_id"] != current_user.user_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    _ensure_project_access(project_id, current_user)
 
     service = _get_analysis_service()
     result = service.get_status(project_id)
     if not result:
         raise HTTPException(status_code=404, detail="No analysis session found")
     return result
+
+
+@router.get("/{project_id}/sessions")
+async def list_analysis_sessions(
+    project_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """List all analysis sessions for a project, newest first."""
+    _ensure_project_access(project_id, current_user)
+    db = get_db()
+    sessions = db.get_analysis_sessions(project_id)
+    return [
+        {
+            "session_id": session["id"],
+            "project_id": session["project_id"],
+            "mode": session["mode"],
+            "status": session["status"],
+            "created_at": session["created_at"],
+            "updated_at": session["updated_at"],
+            "error_message": session.get("error_message"),
+            "progress_message": session.get("progress_message"),
+        }
+        for session in sessions
+    ]
+
+
+@router.get("/{project_id}/sessions/{session_id}", response_model=AnalysisStatusResponse)
+async def get_analysis_session(
+    project_id: str,
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Fetch a specific historical analysis session for a project."""
+    _ensure_project_access(project_id, current_user)
+    db = get_db()
+    session = db.get_analysis_session(session_id)
+    if not session or session["project_id"] != project_id:
+        raise HTTPException(status_code=404, detail="Analysis session not found")
+
+    service = _get_analysis_service()
+    return service._build_response_from_session(session)
 
 
 @router.post("/{project_id}/answers", response_model=AnalysisStatusResponse)
@@ -68,10 +109,7 @@ async def submit_answers(
 ):
     """Submit edited interview answers and trigger story generation (guided mode)."""
     db = get_db()
-
-    project = db.get_project(project_id)
-    if not project or project["owner_id"] != current_user.user_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    _ensure_project_access(project_id, current_user)
 
     # Get the latest session
     session = db.get_latest_analysis_session(project_id)
@@ -99,10 +137,7 @@ async def export_docx(
 ):
     """Export analysis results as DOCX."""
     db = get_db()
-
-    project = db.get_project(project_id)
-    if not project or project["owner_id"] != current_user.user_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = _ensure_project_access(project_id, current_user)
 
     session = db.get_latest_analysis_session(project_id)
     if not session or session["status"] != AnalysisStatus.done.value:

@@ -256,3 +256,12 @@ class DatabaseService:
         ).fetchone()
         self._close_conn(conn)
         return dict(row) if row else None
+
+    def get_analysis_sessions(self, project_id: str) -> List[Dict]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM analysis_sessions WHERE project_id = ? ORDER BY created_at DESC",
+            (project_id,),
+        ).fetchall()
+        self._close_conn(conn)
+        return [dict(row) for row in rows]
