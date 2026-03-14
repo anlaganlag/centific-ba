@@ -1,0 +1,21 @@
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API to backend
+    location /api/ {
+        proxy_pass ${API_URL}/api/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host ba-toolkit-backend.nicemoss-edd0d815.eastus.azurecontainerapps.io;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
