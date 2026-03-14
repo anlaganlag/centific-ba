@@ -1,28 +1,43 @@
 import asyncio
 import json
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIModel
 import os
 from dotenv import load_dotenv
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from app.models.analysis import StoryGenerationResult, Feature
 
 load_dotenv()
 
-model = OpenAIChatModel(
-    os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o'),
-    provider=AzureProvider(
-        azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
-        api_version=os.getenv('AZURE_OPENAI_API_VERSION', '2024-08-01-preview'),
-        api_key=os.getenv('AZURE_OPENAI_API_KEY')
+def _build_model() -> OpenAIModel:
+    azure_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+    azure_api_key = os.getenv('AZURE_OPENAI_API_KEY')
+    azure_deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')
+    azure_api_version = os.getenv('AZURE_OPENAI_API_VERSION', '2024-08-01-preview')
+
+    if azure_endpoint and azure_api_key:
+        return OpenAIModel(
+            azure_deployment,
+            openai_client=AsyncAzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_version=azure_api_version,
+                api_key=azure_api_key,
+            ),
+        )
+
+    return OpenAIModel(
+        os.getenv('OPENAI_MODEL', 'openai:gpt-4o'),
+        openai_client=AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY')),
     )
-)
+
+
+model = _build_model()
 
 # Agent that processes ONE feature at a time to avoid output token limits
 single_feature_agent = Agent(
     model=model,
-    output_type=Feature,
+    result_type=Feature,
     retries=5,
     model_settings={'max_tokens': 4096},
     system_prompt="""You are an expert Business Analyst generating user stories for a single feature.

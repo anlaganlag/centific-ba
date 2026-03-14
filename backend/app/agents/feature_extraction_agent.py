@@ -5,24 +5,39 @@ from typing import List, Optional, Callable
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIModel
 import os
 from dotenv import load_dotenv
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from app.models.analysis import FeatureDraft, FeatureExtractionResult
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-model = OpenAIChatModel(
-    os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o'),
-    provider=AzureProvider(
-        azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
-        api_version=os.getenv('AZURE_OPENAI_API_VERSION', '2024-08-01-preview'),
-        api_key=os.getenv('AZURE_OPENAI_API_KEY')
+def _build_model() -> OpenAIModel:
+    azure_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+    azure_api_key = os.getenv('AZURE_OPENAI_API_KEY')
+    azure_deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')
+    azure_api_version = os.getenv('AZURE_OPENAI_API_VERSION', '2024-08-01-preview')
+
+    if azure_endpoint and azure_api_key:
+        return OpenAIModel(
+            azure_deployment,
+            openai_client=AsyncAzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_version=azure_api_version,
+                api_key=azure_api_key,
+            ),
+        )
+
+    return OpenAIModel(
+        os.getenv('OPENAI_MODEL', 'openai:gpt-4o'),
+        openai_client=AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY')),
     )
-)
+
+
+model = _build_model()
 
 
 # ── Map phase: extract partial features from a single chunk ──
@@ -35,7 +50,7 @@ class ChunkFeatures(BaseModel):
 
 map_agent = Agent(
     model=model,
-    output_type=ChunkFeatures,
+    result_type=ChunkFeatures,
     retries=3,
     model_settings={'max_tokens': 4096},
     system_prompt="""You are an expert Business Analyst extracting features from a document chunk.
@@ -64,7 +79,7 @@ RULES:
 
 reduce_agent = Agent(
     model=model,
-    output_type=FeatureExtractionResult,
+    result_type=FeatureExtractionResult,
     retries=3,
     model_settings={'max_tokens': 4096},
     system_prompt="""You are an expert Business Analyst consolidating features from multiple document chunks.
