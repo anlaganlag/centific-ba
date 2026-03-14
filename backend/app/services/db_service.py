@@ -1,7 +1,7 @@
 import sqlite3
 import json
 from typing import List, Dict, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import uuid
 
@@ -110,7 +110,7 @@ class DatabaseService:
     def create_user(self, email: str, display_name: str, password_hash: str) -> Dict:
         conn = self._get_conn()
         user_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             "INSERT INTO users (id, email, display_name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
             (user_id, email, display_name, password_hash, now),
@@ -137,7 +137,7 @@ class DatabaseService:
     def create_project(self, name: str, description: str, owner_id: str) -> Dict:
         conn = self._get_conn()
         project_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             "INSERT INTO projects (id, name, description, owner_id, created_at) VALUES (?, ?, ?, ?, ?)",
             (project_id, name, description or "", owner_id, now),
@@ -182,7 +182,7 @@ class DatabaseService:
         cached_markdown: str = None,
     ) -> Dict:
         conn = self._get_conn()
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             """INSERT INTO documents
                (id, project_id, filename, file_path, file_type, total_pages, total_chunks, cached_markdown, uploaded_at)
@@ -219,7 +219,7 @@ class DatabaseService:
 
     def create_analysis_session(self, session_id: str, project_id: str, mode: str) -> Dict:
         conn = self._get_conn()
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             """INSERT INTO analysis_sessions
                (id, project_id, mode, status, created_at, updated_at)
@@ -235,7 +235,7 @@ class DatabaseService:
         if not kwargs:
             return
         conn = self._get_conn()
-        kwargs["updated_at"] = datetime.utcnow().isoformat()
+        kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in kwargs)
         values = list(kwargs.values()) + [session_id]
         conn.execute(f"UPDATE analysis_sessions SET {set_clause} WHERE id = ?", values)

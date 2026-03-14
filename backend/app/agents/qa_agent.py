@@ -1,37 +1,8 @@
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
 from pydantic import BaseModel, Field
 from typing import List, Optional
-import os
-from dotenv import load_dotenv
-from openai import AsyncAzureOpenAI, AsyncOpenAI
 
-# Load environment variables from .env file
-load_dotenv()
-
-def _build_model() -> OpenAIModel:
-    azure_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
-    azure_api_key = os.getenv('AZURE_OPENAI_API_KEY')
-    azure_deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')
-    azure_api_version = os.getenv('AZURE_OPENAI_API_VERSION', '2024-08-01-preview')
-
-    if azure_endpoint and azure_api_key:
-        return OpenAIModel(
-            azure_deployment,
-            openai_client=AsyncAzureOpenAI(
-                azure_endpoint=azure_endpoint,
-                api_version=azure_api_version,
-                api_key=azure_api_key,
-            ),
-        )
-
-    return OpenAIModel(
-        os.getenv('OPENAI_MODEL', 'openai:gpt-4o'),
-        openai_client=AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY')),
-    )
-
-
-model = _build_model()
+from app.agents.model_factory import model
 
 
 class QAResponse(BaseModel):
